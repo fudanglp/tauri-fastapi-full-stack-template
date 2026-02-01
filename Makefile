@@ -1,9 +1,10 @@
-.PHONY: setup dev build dev-frontend clean
+.PHONY: setup dev build dev-frontend fastapi clean
 
 # Install all dependencies
 setup:
 	cargo install tauri-cli
 	cd frontend && bun install
+	cd fastapi && uv sync
 
 # Run app in development mode
 dev:
@@ -16,6 +17,10 @@ build:
 # Run frontend dev server only (without Tauri)
 dev-frontend:
 	cd frontend && bun run dev
+
+# Run FastAPI backend (for development)
+fastapi:
+	cd fastapi && DATA_DIR=../.data uv run uvicorn app.main:app --reload --port 1430
 
 # Clean build artifacts
 clean:

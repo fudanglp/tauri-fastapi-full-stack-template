@@ -7,10 +7,36 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Node
 node_modules
 dist
 dist-ssr
 *.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+.env
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# App data (dev)
+.data/*
+!.data/.gitkeep
+
+# SQLite
+*.db
+*.db-wal
+*.db-shm
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +48,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Tauri
+tauri/target/
+tauri/binaries/*
+!tauri/binaries/.gitkeep
