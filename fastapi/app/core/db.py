@@ -1,7 +1,7 @@
 from collections.abc import Generator
 
 from sqlalchemy import event
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.core.config import settings
 
@@ -28,14 +28,28 @@ def set_sqlite_pragma(dbapi_connection, connection_record):  # noqa: ARG001
     cursor.close()
 
 
-def create_db_and_tables() -> None:
-    """Create all tables. Used for initial setup or when not using migrations."""
-    # Ensure data directory exists
-    settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    SQLModel.metadata.create_all(engine)
-
-
 def get_session() -> Generator[Session, None, None]:
     """Dependency that provides a database session."""
     with Session(engine) as session:
         yield session
+
+
+def init_db(session: Session) -> None:
+    """
+    Initialize database with default data.
+    Called after migrations have been applied.
+    """
+    from app import crud
+    from app.models import User
+
+    # Create default local user if AUTH_REQUIRED is False
+    if not settings.AUTH_REQUIRED:
+        user = session.exec(
+            select(User).where(User.email == settings.DEFAULT_USER_EMAIL)
+        ).first()
+        if not user:
+            user = crud.get_or_create_default_user(
+                session=session,
+                email=settings.DEFAULT_USER_EMAIL,
+                full_name=settings.DEFAULT_USER_NAME,
+            )

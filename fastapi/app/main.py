@@ -4,14 +4,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.core.db import create_db_and_tables
+from app.prestart import main as prestart
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001
     """Application lifespan handler - runs on startup and shutdown."""
-    # Startup: Create database tables
-    create_db_and_tables()
+    # Startup: Run migrations and initialize data
+    prestart()
     yield
     # Shutdown: Nothing to clean up for now
 
