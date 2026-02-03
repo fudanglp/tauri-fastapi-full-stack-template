@@ -6,6 +6,14 @@ from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _get_default_data_dir() -> Path:
+    """Get default data directory (project root .data in dev)."""
+    # From fastapi/app/core/config.py, go up 3 levels to project root
+    project_root = Path(__file__).resolve().parent.parent.parent
+    data_dir = project_root / ".data"
+    return data_dir if data_dir.exists() else Path(".data")
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -25,13 +33,6 @@ class Settings(BaseSettings):
 
     # Database settings (SQLite)
     # DATA_DIR is passed from Tauri (app_data_dir) or defaults to project root .data in dev
-    @classmethod
-    def _get_default_data_dir(cls) -> Path:
-        # From fastapi/app/core/config.py, go up 3 levels to project root
-        project_root = Path(__file__).resolve().parent.parent.parent
-        data_dir = project_root / ".data"
-        return data_dir if data_dir.exists() else Path(".data")
-
     DATA_DIR: Path = _get_default_data_dir()
     DATABASE_NAME: str = "app.db"
 
