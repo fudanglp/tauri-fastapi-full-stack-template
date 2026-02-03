@@ -49,7 +49,10 @@ ENV/
 *.sln
 *.sw?
 
+# Rust
+target/
+Cargo.lock
+
 # Tauri
-tauri/target/
 tauri/binaries/*
 !tauri/binaries/.gitkeep

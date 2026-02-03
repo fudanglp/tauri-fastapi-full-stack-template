@@ -52,12 +52,10 @@ fastapi:
 
 ##@ Code Generation 🔮
 
-# Generate TypeScript API client from FastAPI OpenAPI schema
-# This reads the backend models and generates typed frontend client code
+# Generate API clients (TypeScript + Rust) from FastAPI OpenAPI schema
+# This reads the backend models and generates typed client code
 generate-client:
-	@echo "==> 🔮 Generating TypeScript API client from FastAPI backend..."
 	@./scripts/generate-client.sh
-	@echo "==> ✅ API client generated successfully!"
 
 # =============================================================================
 # Database
@@ -123,7 +121,7 @@ help:
 	@echo "    fastapi            Run FastAPI backend only"
 	@echo ""
 	@echo "  Code Generation 🔮"
-	@echo "    generate-client    Generate TypeScript API client"
+	@echo "    generate-client    Generate TypeScript + Rust API clients"
 	@echo ""
 	@echo "  Database 🗄️"
 	@echo "    init-db            Initialize database"

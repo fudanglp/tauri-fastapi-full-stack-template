@@ -27,3 +27,6 @@ log = "0.4"
 ureq = "2"
 once_cell = "1.19"
 envy = "0.4"
+
+# Generated API client
+client = { path = "src/client" }
