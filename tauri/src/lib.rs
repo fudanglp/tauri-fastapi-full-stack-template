@@ -1,5 +1,6 @@
 mod config;
 
+use std::sync::Mutex;
 use std::thread;
 use std::time::Instant;
 use tauri::Manager;
@@ -10,6 +11,15 @@ use std::collections::HashMap;
 use tauri_plugin_shell::ShellExt;
 
 use config::{Settings, SETTINGS};
+
+// Global state to hold the sidecar process handle
+struct SidecarState {
+    #[allow(dead_code)]  // Only used in non-debug builds
+    child: Mutex<Option<tauri_plugin_shell::process::CommandChild>>,
+}
+
+unsafe impl Send for SidecarState {}
+unsafe impl Sync for SidecarState {}
 
 /// Wait for the backend to be ready by polling the health endpoint.
 /// Returns Ok(()) when backend is ready, Err after timeout.
@@ -74,7 +84,7 @@ fn start_backend(app: &tauri::AppHandle) -> Result<(), String> {
             env.insert("PORT".into(), SETTINGS.port.to_string());
 
             // Spawn the sidecar
-            let (_rx, _child) = app
+            let (_rx, child) = app
                 .shell()
                 .sidecar("fastapi-server")
                 .map_err(|e| format!("Failed to create sidecar command: {}", e))?
@@ -82,12 +92,51 @@ fn start_backend(app: &tauri::AppHandle) -> Result<(), String> {
                 .spawn()
                 .map_err(|e| format!("Failed to spawn sidecar: {}", e))?;
 
+            // Store the child handle for cleanup
+            let state = app.state::<SidecarState>();
+            *state.child.lock().unwrap() = Some(child);
+
             log::info!("FastAPI sidecar spawned");
         }
     }
 
     // Wait for backend to be ready (both dev and prod)
     wait_for_backend()
+}
+
+/// Stop the FastAPI sidecar gracefully.
+#[allow(unused_variables)]
+fn stop_backend(app: &tauri::AppHandle) {
+    if Settings::is_dev_mode() {
+        log::info!("Dev mode: no sidecar to stop");
+        return;
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        let state = app.state::<SidecarState>();
+        let mut child_guard = state.child.lock().unwrap();
+
+        if let Some(mut child) = child_guard.take() {
+            log::info!("Stopping FastAPI sidecar...");
+
+            // Try graceful shutdown first (SIGTERM)
+            if let Err(e) = child.kill() {
+                log::warn!("Failed to send SIGTERM to sidecar: {}", e);
+            } else {
+                // Wait a bit for graceful shutdown
+                thread::sleep(std::time::Duration::from_millis(500));
+            }
+
+            // Force kill if still running
+            if child.try_wait().is_none() {
+                log::warn!("Sidecar still running, forcing kill");
+                let _ = child.kill();
+            }
+
+            log::info!("FastAPI sidecar stopped");
+        }
+    }
 }
 
 /// Get the app data directory path
@@ -110,6 +159,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
+        .manage(SidecarState {
+            child: Mutex::new(None),
+        })
         .setup(|app| {
             // Start backend on app setup
             if let Err(e) = start_backend(app.handle()) {
@@ -117,6 +169,13 @@ pub fn run() {
                 panic!("Failed to start backend: {}", e);
             }
             Ok(())
+        })
+        .on_window_event(|app, event| {
+            // Handle window close event
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                log::info!("Window close requested, stopping sidecar...");
+                stop_backend(app.app_handle());
+            }
         })
         .invoke_handler(tauri::generate_handler![get_data_dir, is_dev_mode])
         .run(tauri::generate_context!())

@@ -1,6 +1,5 @@
 use once_cell::sync::Lazy;
 use serde::Deserialize;
-use std::path::PathBuf;
 use std::time::Duration;
 
 fn default_host() -> String {
@@ -9,10 +8,6 @@ fn default_host() -> String {
 
 fn default_port() -> u16 {
     1430
-}
-
-fn default_data_dir() -> PathBuf {
-    ".".into()
 }
 
 fn default_health_check_timeout_secs() -> u64 {
@@ -30,9 +25,6 @@ pub struct Settings {
 
     #[serde(default = "default_port")]
     pub port: u16,
-
-    #[serde(default = "default_data_dir")]
-    pub data_dir: PathBuf,
 
     #[serde(default = "default_health_check_timeout_secs")]
     pub health_check_timeout_secs: u64,
