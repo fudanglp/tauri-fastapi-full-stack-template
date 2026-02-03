@@ -117,24 +117,15 @@ fn stop_backend(app: &tauri::AppHandle) {
         let state = app.state::<SidecarState>();
         let mut child_guard = state.child.lock().unwrap();
 
-        if let Some(mut child) = child_guard.take() {
+        if let Some(child) = child_guard.take() {
             log::info!("Stopping FastAPI sidecar...");
 
-            // Try graceful shutdown first (SIGTERM)
+            // Kill the sidecar process
             if let Err(e) = child.kill() {
-                log::warn!("Failed to send SIGTERM to sidecar: {}", e);
+                log::warn!("Failed to kill sidecar: {}", e);
             } else {
-                // Wait a bit for graceful shutdown
-                thread::sleep(std::time::Duration::from_millis(500));
+                log::info!("FastAPI sidecar stopped");
             }
-
-            // Force kill if still running
-            if child.try_wait().is_none() {
-                log::warn!("Sidecar still running, forcing kill");
-                let _ = child.kill();
-            }
-
-            log::info!("FastAPI sidecar stopped");
         }
     }
 }
