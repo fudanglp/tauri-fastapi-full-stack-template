@@ -2,7 +2,7 @@
 # Makefile for Tauri FastAPI Full Stack Template
 # =============================================================================
 
-.PHONY: setup dev build dev-frontend fastapi init-db clean generate-client
+.PHONY: setup dev build dev-frontend fastapi init-db clean generate-client build-backend
 
 # Project root directory
 PROJECT_ROOT := $(shell pwd)
@@ -75,10 +75,15 @@ init-db:
 
 ##@ Build 📦
 
+# Build the FastAPI sidecar binary (PyInstaller)
+build-backend:
+	@echo "==> 🔨 Building FastAPI sidecar binary..."
+	cd fastapi && uv run --with build build.py
+
 # Build the desktop application for production
 # This will create platform-specific installers in tauri/target/release/bundle/
-build:
-	@echo "==> 📦 Building production bundle..."
+build: build-backend
+	@echo "==> 📦 Building Tauri desktop bundle..."
 	cargo tauri build
 	@echo "==> ✅ Build complete! Check tauri/target/release/bundle/ for output."
 
