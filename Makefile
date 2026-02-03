@@ -100,11 +100,13 @@ clean:
 	cd tauri && cargo clean 2>/dev/null || true
 	@echo "  - ⚛️  Cleaning frontend dist and node_modules..."
 	rm -rf frontend/dist frontend/node_modules
-	@echo "  - 🐍 Cleaning Python venv and data..."
-	rm -rf fastapi/.venv fastapi/.data
+	@echo "  - 🐍 Cleaning Python venv, data, and PyInstaller build..."
+	rm -rf fastapi/.venv fastapi/.data fastapi/build
+	@echo "  - 🔧 Cleaning Tauri binaries..."
+	rm -rf tauri/binaries/fastapi-server*
 	@echo "  - 🗄️  Cleaning local databases..."
 	rm -rf .data/*.db* .data/*.db-wal .data/*.db-shm
-	@echo "  - 🔧 Cleaning generated openapi.json..."
+	@echo "  - 📄 Cleaning generated openapi.json..."
 	rm -f frontend/openapi.json openapi.json
 	@echo "==> ✅ Clean complete!"
 
