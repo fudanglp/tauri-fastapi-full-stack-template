@@ -7,6 +7,10 @@ from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.core.config import settings
 
+# Ensure data directory exists before creating engine
+# (Important for production where DATA_DIR comes from env var)
+settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 # Create engine with SQLite-specific settings
 engine = create_engine(
     settings.SQLALCHEMY_DATABASE_URI,
