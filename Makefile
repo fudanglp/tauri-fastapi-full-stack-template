@@ -92,11 +92,15 @@ build:
 clean:
 	@echo "==> 🧹 Cleaning build artifacts..."
 	@echo "  - 🔨 Cleaning Rust cargo builds..."
-	cd tauri && cargo clean
-	@echo "  - ⚛️  Cleaning frontend dist..."
-	rm -rf frontend/dist
-	@echo "  - 🗄️  Cleaning local database..."
-	rm -rf .data/*.db*
+	cd tauri && cargo clean 2>/dev/null || true
+	@echo "  - ⚛️  Cleaning frontend dist and node_modules..."
+	rm -rf frontend/dist frontend/node_modules
+	@echo "  - 🐍 Cleaning Python venv and data..."
+	rm -rf fastapi/.venv fastapi/.data
+	@echo "  - 🗄️  Cleaning local databases..."
+	rm -rf .data/*.db* .data/*.db-wal .data/*.db-shm
+	@echo "  - 🔧 Cleaning generated openapi.json..."
+	rm -f frontend/openapi.json openapi.json
 	@echo "==> ✅ Clean complete!"
 
 # =============================================================================
