@@ -9,9 +9,9 @@ setup:
 	cd frontend && bun install
 	cd fastapi && uv sync
 
-# Run app in development mode
+# Run app in development mode (no sidecar binary needed)
 dev:
-	cargo tauri dev
+	TAURI_CONFIG='{"bundle":{"externalBin":[]}}' cargo tauri dev
 
 # Build for production
 build:

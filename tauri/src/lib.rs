@@ -1,5 +1,7 @@
+mod config;
+
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tauri::Manager;
 
 #[cfg(not(debug_assertions))]
@@ -7,19 +9,21 @@ use std::collections::HashMap;
 #[cfg(not(debug_assertions))]
 use tauri_plugin_shell::ShellExt;
 
-const BACKEND_URL: &str = "http://127.0.0.1:1430";
-const HEALTH_ENDPOINT: &str = "http://127.0.0.1:1430/api/v1/health";
-const HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(30);
-const HEALTH_CHECK_INTERVAL: Duration = Duration::from_millis(200);
+use config::{Settings, SETTINGS};
 
 /// Wait for the backend to be ready by polling the health endpoint.
 /// Returns Ok(()) when backend is ready, Err after timeout.
 fn wait_for_backend() -> Result<(), String> {
-    log::info!("Waiting for backend at {}...", BACKEND_URL);
+    let backend_url = SETTINGS.backend_url();
+    let health_endpoint = SETTINGS.health_endpoint();
+    let timeout = SETTINGS.health_check_timeout();
+    let interval = SETTINGS.health_check_interval();
+
+    log::info!("Waiting for backend at {}...", backend_url);
     let start = Instant::now();
 
-    while start.elapsed() < HEALTH_CHECK_TIMEOUT {
-        match ureq::get(HEALTH_ENDPOINT).call() {
+    while start.elapsed() < timeout {
+        match ureq::get(&health_endpoint).call() {
             Ok(response) if response.status() == 200 => {
                 log::info!("Backend is ready (took {:?})", start.elapsed());
                 return Ok(());
@@ -31,12 +35,12 @@ fn wait_for_backend() -> Result<(), String> {
                 log::debug!("Health check failed: {}", e);
             }
         }
-        thread::sleep(HEALTH_CHECK_INTERVAL);
+        thread::sleep(interval);
     }
 
     Err(format!(
         "Backend not ready after {:?}. Is it running? Try: make fastapi",
-        HEALTH_CHECK_TIMEOUT
+        timeout
     ))
 }
 
@@ -45,8 +49,8 @@ fn wait_for_backend() -> Result<(), String> {
 /// - In production: spawns the bundled sidecar binary
 #[allow(unused_variables)]
 fn start_backend(app: &tauri::AppHandle) -> Result<(), String> {
-    if cfg!(debug_assertions) {
-        log::info!("Dev mode: expecting FastAPI backend at {}", BACKEND_URL);
+    if Settings::is_dev_mode() {
+        log::info!("Dev mode: expecting FastAPI backend at {}", SETTINGS.backend_url());
         log::info!("Run: make fastapi");
     } else {
         #[cfg(not(debug_assertions))]
@@ -66,8 +70,8 @@ fn start_backend(app: &tauri::AppHandle) -> Result<(), String> {
             // Set environment variables for the sidecar
             let mut env: HashMap<String, String> = HashMap::new();
             env.insert("DATA_DIR".into(), data_dir.to_string_lossy().to_string());
-            env.insert("HOST".into(), "127.0.0.1".into());
-            env.insert("PORT".into(), "1430".into());
+            env.insert("HOST".into(), SETTINGS.host.clone());
+            env.insert("PORT".into(), SETTINGS.port.to_string());
 
             // Spawn the sidecar
             let (_rx, _child) = app
@@ -98,7 +102,7 @@ fn get_data_dir(app: tauri::AppHandle) -> Result<String, String> {
 /// Check if running in development mode
 #[tauri::command]
 fn is_dev_mode() -> bool {
-    cfg!(debug_assertions)
+    Settings::is_dev_mode()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
