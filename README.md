@@ -2,6 +2,11 @@
 
 > A **template** for building desktop applications with Tauri (Rust), FastAPI (Python), and React (TypeScript).
 
+This project combines two excellent templates:
+
+- **[Tauri](https://tauri.app)** - Cross-platform desktop apps with Rust
+- **[FastAPI Full Stack Template](https://github.com/fastapi/full-stack-fastapi-template)** - Production-ready backend/frontend stack
+
 This is a **starter template** designed to be customized for your own application. It provides a complete full-stack desktop app foundation with optional authentication.
 
 ## Features
@@ -134,6 +139,79 @@ This regenerates TypeScript and Rust clients from the OpenAPI schema.
 ```
 
 ## Architecture
+
+This is a backend/frontend desktop application. The Python FastAPI backend handles data persistence and business logic, while the React frontend provides the UI. Tauri wraps everything as a desktop app.
+
+### Database Management (SQLite + Alembic)
+
+**Database**: SQLite for simplicity (no external server needed)
+
+**Migrations**: Alembic for schema version control
+
+```bash
+# Create a migration after changing models
+cd fastapi
+uv run alembic revision --autogenerate -m "description"
+
+# Apply migrations
+uv run alembic upgrade head
+
+# In production: migrations run automatically on first startup
+# (Schema created from SQLModel models, no alembic files needed)
+```
+
+**Development vs Production**:
+- **Dev**: Alembic migrations run on startup (`make fastapi` or `make dev`)
+- **Production**: Tables created from SQLModel models (alembic files bundled but not used)
+
+**Reset database**:
+```bash
+make init-db  # Re-initializes database with default user
+```
+
+### Data Models (SQLModel + OpenAPI Codegen)
+
+**Model Flow**: `FastAPI/SQLModel → OpenAPI JSON → TypeScript Types`
+
+```
+┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
+│  FastAPI Models │  →   │  OpenAPI Schema │  →   │ TypeScript Types│
+│  (SQLModel)     │      │  (openapi.json) │      │  (auto-gen)     │
+└─────────────────┘      └─────────────────┘      └─────────────────┘
+```
+
+Models are defined **once** in `fastapi/app/models/` using [SQLModel](https://sqlmodel.tutorial.fastapi.to/):
+
+```python
+# fastapi/app/models/user.py
+from sqlmodel import Field, SQLModel
+from typing import Optional
+
+class User(SQLModel, table=True):
+    id: str = Field(default_factory=lambda: uuid4().hex, primary_key=True)
+    email: str = Field(unique=True, index=True)
+    full_name: Optional[str] = None
+    is_active: bool = True
+```
+
+**TypeScript types are auto-generated** - no manual type definitions needed:
+
+```typescript
+// frontend/src/client/types.ts - AUTO-GENERATED
+export interface User {
+  id: string;
+  email: string;
+  full_name?: string;
+  is_active: boolean;
+}
+```
+
+**Adding a model**:
+
+1. Define model in `fastapi/app/models/`
+2. Import in `fastapi/app/models/__init__.py`
+3. Create migration: `uv run alembic revision --autogenerate -m "add model"`
+4. Regenerate client: `make generate-client`
 
 ### Sidecar Pattern
 
