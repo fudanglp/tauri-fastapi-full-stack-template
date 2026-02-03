@@ -37,6 +37,8 @@ ENV/
 *.db
 *.db-wal
 *.db-shm
+# But NOT in fastapi/ root (those are misplaced, use .data/ instead)
+fastapi/*.db*
 
 # Editor directories and files
 .vscode/*

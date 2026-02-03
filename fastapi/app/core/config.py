@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
     # Database settings (SQLite)
-    # DATA_DIR is passed from Tauri (app_data_dir) or defaults to current directory
-    DATA_DIR: Path = Path(".")
+    # DATA_DIR is passed from Tauri (app_data_dir) or defaults to .data directory
+    DATA_DIR: Path = Path(".data")
     DATABASE_NAME: str = "app.db"
 
     @computed_field
