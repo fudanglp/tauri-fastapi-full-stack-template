@@ -758,3 +758,32 @@ These can be set via:
 1. CLI arguments to the sidecar
 2. Config file in app_data_dir
 3. Environment variables (mainly for development)
+
+---
+
+## TODO
+
+### Remaining Tasks
+
+#### High Priority
+- [ ] **PyInstaller spec file** - Create `fastapi-server.spec` for packaging Python backend
+- [ ] **Graceful shutdown** - Implement sidecar termination on app close
+- [ ] **Full build test** - Run `make build` and verify desktop app works
+
+#### Medium Priority
+- [ ] **Password recovery routes** - Remove or redesign `recover-password.tsx` and `reset-password.tsx` (email removed)
+- [ ] **Operation ID cleanup** - Shorten FastAPI operation IDs for cleaner client codegen
+- [ ] **Documentation** - Add README with setup and build instructions
+
+#### Low Priority
+- [ ] **Multi-platform testing** - Test build on macOS, Windows
+- [ ] **Add user settings page** - Enable/disable auth, change port, etc.
+- [ ] **Error handling** - Better error messages when backend fails to start
+- [ ] **Logging** - File-based logging for sidecar in production
+
+### Completed
+- [x] Backend setup with SQLite and optional auth
+- [x] Frontend migration with TanStack Router and shadcn/ui
+- [x] API client generation (TypeScript + Rust via openapi-generator)
+- [x] Makefile with dev/build/clean commands
+- [x] Database location defaults to `project_root/.data` in development
