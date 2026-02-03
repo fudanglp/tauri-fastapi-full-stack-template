@@ -54,6 +54,7 @@ def health_check():
     return {"status": "healthy"}
 
 
-# Import and include routers here once they're created
-# from app.api.main import api_router
-# app.include_router(api_router, prefix=settings.API_V1_STR)
+# Include API routes
+from app.api.main import api_router
+
+app.include_router(api_router, prefix=settings.API_V1_STR)
