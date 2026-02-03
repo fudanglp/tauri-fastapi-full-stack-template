@@ -19,17 +19,23 @@ def is_frozen() -> bool:
 
 
 def run_migrations() -> None:
-    """Run alembic migrations to head."""
-    # Skip migrations in frozen/production builds
-    # Migrations should be run separately during deployment
+    """Run alembic migrations to head, or create tables from models."""
+    # Ensure data directory exists
+    settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
+
     if is_frozen():
-        logger.info("Production build: skipping migrations (run separately)")
+        # Production build: create tables directly from SQLModel models
+        logger.info("Production build: creating database schema from models...")
+        from sqlmodel import SQLModel
+
+        from app.core.db import engine
+        from app.models import User
+
+        SQLModel.metadata.create_all(engine)
+        logger.info("Database schema created")
         return
 
     logger.info("Running database migrations...")
-
-    # Ensure data directory exists
-    settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     # Find alembic.ini relative to this file
     # app/prestart.py -> app/ -> fastapi/ -> alembic.ini
