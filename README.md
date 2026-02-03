@@ -23,11 +23,14 @@ This is a **starter template** designed to be customized for your own applicatio
 # Install dependencies
 make setup
 
-# Run in development mode (uses embedded Python, no pre-built binary needed)
+# Terminal 1: Start the FastAPI backend
+make fastapi
+
+# Terminal 2: Start the Tauri desktop app
 make dev
 ```
 
-The app opens at http://localhost:1420 with the backend API at http://localhost:1430.
+**Why two terminals?** In development mode, Tauri doesn't spawn the sidecar binary (it uses the dev server instead). The backend runs separately so you get hot-reload and easier debugging. The app opens at http://localhost:1420 with the backend API at http://localhost:1430.
 
 ## Development
 
