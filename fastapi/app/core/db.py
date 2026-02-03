@@ -1,5 +1,7 @@
+import time
 from collections.abc import Generator
 
+from loguru import logger
 from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine, select
 
@@ -9,8 +11,26 @@ from app.core.config import settings
 engine = create_engine(
     settings.SQLALCHEMY_DATABASE_URI,
     connect_args={"check_same_thread": False},  # Required for SQLite with FastAPI
-    echo=settings.ENVIRONMENT == "local",  # Log SQL in development
 )
+
+
+# SQL query logging via SQLAlchemy events (only in local dev)
+if settings.ENVIRONMENT == "local":
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def before_cursor_execute(
+        conn, cursor, statement, parameters, context, executemany
+    ):
+        conn.info.setdefault("query_start_time", []).append(time.time())
+
+    @event.listens_for(engine, "after_cursor_execute")
+    def after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        total = (time.time() - conn.info["query_start_time"].pop(-1)) * 1000
+        # Log SQL on single line with parameters
+        sql = " ".join(statement.split())  # Collapse whitespace/newlines
+        if parameters:
+            sql = f"{sql} {parameters}"
+        logger.info(f"SQL ({total:.2f}ms): {sql}")
 
 
 @event.listens_for(engine, "connect")

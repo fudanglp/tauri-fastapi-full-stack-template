@@ -3,14 +3,10 @@ Initialize database with default data.
 Called after migrations have been applied.
 """
 
-import logging
-
+from loguru import logger
 from sqlmodel import Session
 
 from app.core.db import engine, init_db
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 def init() -> None:

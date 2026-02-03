@@ -14,6 +14,7 @@ dependencies = [
     "pyjwt>=2.8.0,<3.0.0",
     "pwdlib[argon2,bcrypt]>=0.3.0",
     "aiosqlite>=0.20.0",
+    "loguru>=0.7.0",
 ]
 
 [dependency-groups]

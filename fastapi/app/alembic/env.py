@@ -1,5 +1,3 @@
-from logging.config import fileConfig
-
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
@@ -7,9 +5,8 @@ from sqlalchemy import engine_from_config, pool
 # access to the values within the .ini file in use.
 config = context.config
 
-# Interpret the config file for Python logging.
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+# Note: We don't use fileConfig() here because logging is
+# configured via loguru in app.core.logging
 
 # Import models for autogenerate support
 from app.models import SQLModel  # noqa

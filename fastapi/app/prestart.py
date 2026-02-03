@@ -3,16 +3,13 @@ Prestart script: run migrations and initialize data.
 Called on application startup before serving requests.
 """
 
-import logging
 from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
+from loguru import logger
 
 from app.core.config import settings
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 def run_migrations() -> None:
@@ -56,4 +53,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    from app.core.logging import setup_logging
+
+    setup_logging()
     main()
