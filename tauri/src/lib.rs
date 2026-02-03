@@ -126,11 +126,13 @@ fn stop_backend(app: &tauri::AppHandle) {
             // Note: CommandChild.kill() consumes self, so we get PID first
             #[cfg(unix)]
             {
-                use std::process::Command;
+                use std::process::{Command, Stdio};
 
                 // Send SIGTERM for graceful shutdown
                 if let Err(e) = Command::new("kill")
                     .args(["-TERM", &pid.to_string()])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
                     .status()
                 {
                     log::warn!("Failed to send SIGTERM: {}", e);
@@ -141,6 +143,8 @@ fn stop_backend(app: &tauri::AppHandle) {
                         // Check if process is still running
                         if Command::new("kill")
                             .args(["-0", &pid.to_string()])
+                            .stdout(Stdio::null())
+                            .stderr(Stdio::null())
                             .status()
                             .is_err()
                         {
@@ -152,17 +156,21 @@ fn stop_backend(app: &tauri::AppHandle) {
                     log::warn!("Sidecar still running, sending SIGKILL");
                     let _ = Command::new("kill")
                         .args(["-9", &pid.to_string()])
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null())
                         .status();
                 }
             }
 
             #[cfg(windows)]
             {
-                // On Windows, just use Taskkill with /TERM (graceful)
-                use std::process::Command;
+                use std::process::{Command, Stdio};
 
+                // On Windows, just use Taskkill with /TERM (graceful)
                 let _ = Command::new("taskkill")
                     .args(["/PID", &pid.to_string(), "/T"])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
                     .status();
             }
 
