@@ -3,6 +3,7 @@ Prestart script: run migrations and initialize data.
 Called on application startup before serving requests.
 """
 
+import sys
 from pathlib import Path
 
 from alembic import command
@@ -12,8 +13,19 @@ from loguru import logger
 from app.core.config import settings
 
 
+def is_frozen() -> bool:
+    """Check if running in PyInstaller bundle."""
+    return getattr(sys, "frozen", False)
+
+
 def run_migrations() -> None:
     """Run alembic migrations to head."""
+    # Skip migrations in frozen/production builds
+    # Migrations should be run separately during deployment
+    if is_frozen():
+        logger.info("Production build: skipping migrations (run separately)")
+        return
+
     logger.info("Running database migrations...")
 
     # Ensure data directory exists

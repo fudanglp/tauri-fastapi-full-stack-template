@@ -62,3 +62,15 @@ def health_check():
 from app.api.main import api_router
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+
+if __name__ == "__main__":
+    # Run uvicorn when executed directly (for PyInstaller binary)
+    import uvicorn
+
+    uvicorn.run(
+        app,  # Pass app object directly, not string, for PyInstaller compatibility
+        host=settings.HOST,
+        port=settings.PORT,
+        log_level="info",
+    )
