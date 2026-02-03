@@ -9,6 +9,8 @@ This project combines two excellent templates:
 
 This is a **starter template** designed to be customized for your own application. It provides a complete full-stack desktop app foundation with optional authentication.
 
+![App Screenshot](docs/assets/screenshot-dashboard.png)
+
 ## Features
 
 - **Frontend**: React + TypeScript with Vite, TanStack Router, TanStack Query, Tailwind CSS, shadcn/ui
