@@ -171,13 +171,13 @@ make init-db  # Re-initializes database with default user
 
 ### Data Models (SQLModel + OpenAPI Codegen)
 
-**Model Flow**: `FastAPI/SQLModel → OpenAPI JSON → TypeScript Types`
+**Model Flow**: `FastAPI/SQLModel → OpenAPI JSON → TypeScript + Rust Types`
 
-```
-┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
-│  FastAPI Models │  →   │  OpenAPI Schema │  →   │ TypeScript Types│
-│  (SQLModel)     │      │  (openapi.json) │      │  (auto-gen)     │
-└─────────────────┘      └─────────────────┘      └─────────────────┘
+```mermaid
+flowchart LR
+    A[FastAPI Models<br/>SQLModel] --> B[OpenAPI Schema<br/>openapi.json]
+    B --> C[TypeScript Types<br/>auto-gen]
+    B --> D[Rust Types<br/>auto-gen]
 ```
 
 Models are defined **once** in `fastapi/app/models/` using [SQLModel](https://sqlmodel.tutorial.fastapi.to/):
@@ -194,7 +194,7 @@ class User(SQLModel, table=True):
     is_active: bool = True
 ```
 
-**TypeScript types are auto-generated** - no manual type definitions needed:
+**Types are auto-generated for both frontend and backend** - no manual type definitions needed:
 
 ```typescript
 // frontend/src/client/types.ts - AUTO-GENERATED
@@ -206,12 +206,23 @@ export interface User {
 }
 ```
 
+```rust
+// tauri/src/client/types.rs - AUTO-GENERATED
+#[derive(Serialize, Deserialize)]
+pub struct User {
+    pub id: String,
+    pub email: String,
+    pub full_name: Option<String>,
+    pub is_active: bool,
+}
+```
+
 **Adding a model**:
 
 1. Define model in `fastapi/app/models/`
 2. Import in `fastapi/app/models/__init__.py`
 3. Create migration: `uv run alembic revision --autogenerate -m "add model"`
-4. Regenerate client: `make generate-client`
+4. Regenerate clients: `make generate-client`
 
 ### Sidecar Pattern
 
