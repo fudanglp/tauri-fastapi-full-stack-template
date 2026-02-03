@@ -2,9 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 
 import {
-  type Body_login_login_access_token as AccessToken,
+  type Body_login_access_token_api_v1_login_access_token_post as AccessToken,
   LoginService,
-  type UserPublic,
+  type ReadUserMeApiV1UsersMeGetResponse as UserPublic,
   type UserRegister,
   UsersService,
 } from "@/client"
@@ -21,15 +21,15 @@ const useAuth = () => {
   const { showErrorToast } = useCustomToast()
 
   // Always fetch user - backend returns default user when auth is disabled
-  const { data: user } = useQuery<UserPublic | null, Error>({
+  const { data: user } = useQuery<UserPublic | undefined, Error>({
     queryKey: ["currentUser"],
-    queryFn: UsersService.readUserMe,
+    queryFn: () => UsersService.readUserMeApiV1UsersMeGet(),
     retry: false,
   })
 
   const signUpMutation = useMutation({
     mutationFn: (data: UserRegister) =>
-      UsersService.registerUser({ requestBody: data }),
+      UsersService.registerUserApiV1UsersSignupPost({ requestBody: data }),
     onSuccess: () => {
       navigate({ to: "/login" })
     },
@@ -40,9 +40,10 @@ const useAuth = () => {
   })
 
   const login = async (data: AccessToken) => {
-    const response = await LoginService.loginAccessToken({
-      formData: data,
-    })
+    const response =
+      await LoginService.accessTokenApiV1LoginAccessTokenPost({
+        formData: data,
+      })
     localStorage.setItem("access_token", response.access_token)
   }
 

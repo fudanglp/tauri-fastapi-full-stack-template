@@ -53,7 +53,7 @@ const ChangePassword = () => {
 
   const mutation = useMutation({
     mutationFn: (data: UpdatePassword) =>
-      UsersService.updatePasswordMe({ requestBody: data }),
+      UsersService.updatePasswordMeApiV1UsersMePasswordPatch({ requestBody: data }),
     onSuccess: () => {
       showSuccessToast("Password updated successfully")
       form.reset()

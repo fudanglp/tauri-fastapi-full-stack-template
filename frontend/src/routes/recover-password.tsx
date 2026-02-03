@@ -8,7 +8,8 @@ import {
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 
-import { LoginService } from "@/client"
+// Password recovery not implemented in backend yet
+// import { LoginService } from "@/client"
 import { AuthLayout } from "@/components/Common/AuthLayout"
 import {
   Form,
@@ -57,10 +58,9 @@ function RecoverPassword() {
   })
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
-  const recoverPassword = async (data: FormData) => {
-    await LoginService.recoverPassword({
-      email: data.email,
-    })
+  const recoverPassword = async (_data: FormData) => {
+    // Password recovery endpoint not implemented in backend yet
+    throw new Error("Password recovery is not implemented. Please contact an administrator.")
   }
 
   const mutation = useMutation({

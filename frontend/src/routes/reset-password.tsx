@@ -9,7 +9,8 @@ import {
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 
-import { LoginService } from "@/client"
+// Password reset not implemented in backend yet
+// import { LoginService } from "@/client"
 import { AuthLayout } from "@/components/Common/AuthLayout"
 import {
   Form,
@@ -82,8 +83,10 @@ function ResetPassword() {
   })
 
   const mutation = useMutation({
-    mutationFn: (data: { new_password: string; token: string }) =>
-      LoginService.resetPassword({ requestBody: data }),
+    mutationFn: (_data: { new_password: string; token: string }) => {
+      // Password reset endpoint not implemented in backend yet
+      throw new Error("Password reset is not implemented. Please contact an administrator.")
+    },
     onSuccess: () => {
       showSuccessToast("Password updated successfully")
       form.reset()
