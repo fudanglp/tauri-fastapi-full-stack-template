@@ -24,9 +24,21 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
 
     # Database settings (SQLite)
-    # DATA_DIR is passed from Tauri (app_data_dir) or defaults to .data directory
-    DATA_DIR: Path = Path(".data")
+    # DATA_DIR is passed from Tauri (app_data_dir) or defaults to project root .data in dev
+    @classmethod
+    def _get_default_data_dir(cls) -> Path:
+        # From fastapi/app/core/config.py, go up 3 levels to project root
+        project_root = Path(__file__).resolve().parent.parent.parent
+        data_dir = project_root / ".data"
+        return data_dir if data_dir.exists() else Path(".data")
+
+    DATA_DIR: Path = _get_default_data_dir()
     DATABASE_NAME: str = "app.db"
+
+    @property
+    def is_dev(self) -> bool:
+        """Check if running in development mode."""
+        return self.ENVIRONMENT in ("local", "development")
 
     @computed_field
     @property
