@@ -120,12 +120,53 @@ fn stop_backend(app: &tauri::AppHandle) {
         if let Some(child) = child_guard.take() {
             log::info!("Stopping FastAPI sidecar...");
 
-            // Kill the sidecar process
-            if let Err(e) = child.kill() {
-                log::warn!("Failed to kill sidecar: {}", e);
-            } else {
-                log::info!("FastAPI sidecar stopped");
+            let pid = child.pid();
+
+            // Try graceful shutdown first (SIGTERM)
+            // Note: CommandChild.kill() consumes self, so we get PID first
+            #[cfg(unix)]
+            {
+                use std::process::Command;
+
+                // Send SIGTERM for graceful shutdown
+                if let Err(e) = Command::new("kill")
+                    .args(["-TERM", &pid.to_string()])
+                    .status()
+                {
+                    log::warn!("Failed to send SIGTERM: {}", e);
+                } else {
+                    // Wait up to 2 seconds for graceful shutdown
+                    for _ in 0..20 {
+                        thread::sleep(std::time::Duration::from_millis(100));
+                        // Check if process is still running
+                        if Command::new("kill")
+                            .args(["-0", &pid.to_string()])
+                            .status()
+                            .is_err()
+                        {
+                            log::info!("FastAPI sidecar stopped gracefully");
+                            return;
+                        }
+                    }
+                    // Process still running, force kill
+                    log::warn!("Sidecar still running, sending SIGKILL");
+                    let _ = Command::new("kill")
+                        .args(["-9", &pid.to_string()])
+                        .status();
+                }
             }
+
+            #[cfg(windows)]
+            {
+                // On Windows, just use Taskkill with /TERM (graceful)
+                use std::process::Command;
+
+                let _ = Command::new("taskkill")
+                    .args(["/PID", &pid.to_string(), "/T"])
+                    .status();
+            }
+
+            log::info!("FastAPI sidecar stopped");
         }
     }
 }
