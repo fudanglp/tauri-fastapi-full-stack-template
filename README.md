@@ -99,7 +99,7 @@ AUTH_REQUIRED: bool = False  # Set to True to enable authentication
 
 ### 4. Update Database Models
 
-- Edit `fastapi/app/models/` - add your SQLModel models
+- Edit `fastapi/app/models.py` - add your SQLModel models
 - Create migration: `cd fastapi && uv run alembic revision --autogenerate -m "description"`
 - Run migrations: `uv run alembic upgrade head`
 
@@ -125,14 +125,14 @@ This regenerates TypeScript and Rust clients from the OpenAPI schema.
 │   ├── src/
 │   │   ├── routes/   # TanStack Router file-based routing
 │   │   ├── components/
-│   │   ├── services/ # API client (auto-generated)
+│   │   ├── client/   # API client (auto-generated)
 │   │   └── hooks/    # React hooks (useAuth, etc.)
 │   └── openapi.json  # OpenAPI schema (auto-generated)
 ├── fastapi/          # Python FastAPI backend
 │   ├── app/
 │   │   ├── api/      # API routes
 │   │   ├── core/     # Config, DB, logging
-│   │   ├── models/   # SQLModel database models
+│   │   ├── models.py # SQLModel database models
 │   │   └── crud/     # Database operations
 │   └── alembic/      # Database migrations
 ├── tauri/            # Rust desktop app
@@ -174,6 +174,14 @@ uv run alembic upgrade head
 make init-db  # Re-initializes database with default user
 ```
 
+**Database Location**:
+- **Dev**: `.data/app.db` (project root)
+- **Production (Linux)**: `~/.local/share/com.glp.tauri-fastapi-full-stack-template/app.db`
+- **Production (macOS)**: `~/Library/Application Support/com.glp.tauri-fastapi-full-stack-template/app.db`
+- **Production (Windows)**: `%APPDATA%\com.glp.tauri-fastapi-full-stack-template\app.db`
+
+📖 **See [docs/data-management.md](docs/data-management.md)** for complete documentation on data storage, migrations, and models.
+
 ### Data Models (SQLModel + OpenAPI Codegen)
 
 **Model Flow**: `FastAPI/SQLModel → OpenAPI JSON → TypeScript + Rust Types`
@@ -185,10 +193,10 @@ flowchart LR
     B --> D[Rust Types<br/>auto-gen]
 ```
 
-Models are defined **once** in `fastapi/app/models/` using [SQLModel](https://sqlmodel.tutorial.fastapi.to/):
+Models are defined **once** in `fastapi/app/models.py` using [SQLModel](https://sqlmodel.tutorial.fastapi.to/):
 
 ```python
-# fastapi/app/models/user.py
+# fastapi/app/models.py
 from sqlmodel import Field, SQLModel
 from typing import Optional
 
@@ -224,10 +232,12 @@ pub struct User {
 
 **Adding a model**:
 
-1. Define model in `fastapi/app/models/`
-2. Import in `fastapi/app/models/__init__.py`
-3. Create migration: `uv run alembic revision --autogenerate -m "add model"`
+1. Define model in `fastapi/app/models.py`
+2. Create migration: `uv run alembic revision --autogenerate -m "add model"`
+3. Apply migration: `uv run alembic upgrade head`
 4. Regenerate clients: `make generate-client`
+
+📖 **See [docs/data-management.md](docs/data-management.md)** for complete documentation on model types, hierarchies, and code generation.
 
 ### Sidecar Pattern
 
@@ -252,13 +262,6 @@ This template uses a **three-process architecture** where Frontend, Tauri (Rust)
 4. Tauri maximizes/restores the window
 
 📖 **See [docs/IPC.md](docs/IPC.md)** for complete documentation on communication patterns.
-
-### Database Location
-
-- **Dev**: `.data/app.db` (project root)
-- **Production (Linux)**: `~/.local/share/com.glp.tauri-fastapi-full-stack-template/app.db`
-- **Production (macOS)**: `~/Library/Application Support/com.glp.tauri-fastapi-full-stack-template/app.db`
-- **Production (Windows)**: `%APPDATA%\com.glp.tauri-fastapi-full-stack-template\app.db`
 
 ### Auth (Optional)
 
