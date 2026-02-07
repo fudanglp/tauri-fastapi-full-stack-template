@@ -4,6 +4,10 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::Instant;
 use tauri::Manager;
+use tauri::AppHandle;
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{TrayIconEvent, TrayIconBuilder};
+use tauri_plugin_notification::NotificationExt;
 
 #[cfg(not(debug_assertions))]
 use std::collections::HashMap;
@@ -194,11 +198,77 @@ fn is_dev_mode() -> bool {
     Settings::is_dev_mode()
 }
 
+/// Create the system tray with menu items
+fn create_system_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    // Create menu items
+    let show_item = MenuItem::with_id(app, "show", "Show", true, None::<&str>)?;
+    let hide_item = MenuItem::with_id(app, "hide", "Hide", true, None::<&str>)?;
+    let notify_item = MenuItem::with_id(app, "notify", "Test Notification", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+
+    // Create the menu
+    let menu = Menu::with_items(app, &[&show_item, &hide_item, &notify_item, &quit_item])?;
+
+    // Create the tray icon using the 32x32 icon
+    let _tray = TrayIconBuilder::new()
+        .menu(&menu)
+        .show_menu_on_left_click(true)
+        .tooltip("Tauri FastAPI Template")
+        .icon(app.default_window_icon().unwrap().clone())
+        .on_tray_icon_event(|_tray, event| {
+            match event {
+                TrayIconEvent::Click {
+                    id: _,
+                    position: _,
+                    rect: _,
+                    button: _,
+                    button_state: _,
+                } => {
+                    log::info!("Tray icon clicked");
+                }
+                TrayIconEvent::DoubleClick {
+                    id: _,
+                    position: _,
+                    rect: _,
+                    button: _,
+                } => {
+                    log::info!("Tray icon double clicked");
+                }
+                TrayIconEvent::Enter {
+                    id: _,
+                    position: _,
+                    rect: _,
+                } => {
+                    log::info!("Mouse entered tray icon");
+                }
+                TrayIconEvent::Move {
+                    id: _,
+                    position: _,
+                    rect: _,
+                } => {
+                    log::info!("Mouse moved on tray icon");
+                }
+                TrayIconEvent::Leave {
+                    id: _,
+                    position: _,
+                    rect: _,
+                } => {
+                    log::info!("Mouse left tray icon");
+                }
+                _ => {}
+            }
+        })
+        .build(app)?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(SidecarState {
             child: Mutex::new(None),
         })
@@ -208,7 +278,41 @@ pub fn run() {
                 log::error!("Failed to start backend: {}", e);
                 panic!("Failed to start backend: {}", e);
             }
+
+            // Create system tray
+            if let Err(e) = create_system_tray(app.handle()) {
+                log::error!("Failed to create system tray: {}", e);
+            }
+
             Ok(())
+        })
+        .on_menu_event(|app, event| {
+            match event.id.as_ref() {
+                "show" => {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+                "hide" => {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.hide();
+                    }
+                }
+                "notify" => {
+                    let _ = app.notification()
+                        .builder()
+                        .title("Hello from Tray!")
+                        .body("This is a test notification from the system tray.")
+                        .show();
+                }
+                "quit" => {
+                    log::info!("Quit menu item clicked");
+                    stop_backend(app.app_handle());
+                    app.exit(0);
+                }
+                _ => {}
+            }
         })
         .on_window_event(|app, event| {
             // Handle window close event
