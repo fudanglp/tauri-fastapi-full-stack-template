@@ -78,13 +78,13 @@ graph TB
 
 ### Data Management
 
-**Database**: SQLite for local data storage (no external server needed)
+**Database**: SQLite (included with Python standard library, no external server needed)
 
 **Location**:
 - **Dev**: `.data/app.db` (project root)
-- **Production (Linux)**: `~/.local/share/com.glp.tauri-fastapi-full-stack-template/app.db`
-- **Production (macOS)**: `~/Library/Application Support/com.glp.tauri-fastapi-full-stack-template/app.db`
-- **Production (Windows)**: `%APPDATA%\com.glp.tauri-fastapi-full-stack-template\app.db`
+- **Production (Linux)**: `~/.local/share/com.example.tauri-fastapi-full-stack-template/app.db`
+- **Production (macOS)**: `~/Library/Application Support/com.example.tauri-fastapi-full-stack-template/app.db`
+- **Production (Windows)**: `%APPDATA%\com.example.tauri-fastapi-full-stack-template\app.db`
 
 **Models**: SQLModel with automatic TypeScript/Rust type generation via OpenAPI
 

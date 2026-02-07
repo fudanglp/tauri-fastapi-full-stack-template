@@ -23,9 +23,9 @@ The data directory location varies by platform:
 
 | Platform | Path |
 |----------|------|
-| **Linux** | `~/.local/share/com.glp.tauri-fastapi-full-stack-template/` |
-| **macOS** | `~/Library/Application Support/com.glp.tauri-fastapi-full-stack-template/` |
-| **Windows** | `C:\Users\<user>\AppData\Roaming\com.glp.tauri-fastapi-full-stack-template\` |
+| **Linux** | `~/.local/share/com.example.tauri-fastapi-full-stack-template/` |
+| **macOS** | `~/Library/Application Support/com.example.tauri-fastapi-full-stack-template/` |
+| **Windows** | `C:\Users\<user>\AppData\Roaming\com.example.tauri-fastapi-full-stack-template\` |
 
 The identifier comes from `tauri.conf.json` → `identifier`.
 

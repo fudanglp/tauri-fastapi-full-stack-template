@@ -95,7 +95,7 @@ For reference, the original integration plan is preserved below:
 |--------|-------------|------------|
 | **Backend** | Runs via `uvicorn --reload` (separate terminal) | Bundled PyInstaller binary spawned by Tauri |
 | **Frontend** | Vite dev server (HMR) | Built static files |
-| **Database** | `.data/app.db` (project root) | `~/.local/share/com.glp.tauri-fastapi-full-stack-template/app.db` |
+| **Database** | `.data/app.db` (project root) | `~/.local/share/com.example.tauri-fastapi-full-stack-template/app.db` |
 | **Auth** | Optional (AUTH_REQUIRED=false) | Optional (AUTH_REQUIRED=false) |
 
 ### Data Model Flow
