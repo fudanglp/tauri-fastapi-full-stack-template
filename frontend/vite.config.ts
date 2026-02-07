@@ -38,5 +38,12 @@ export default defineConfig({
           port: 1421,
         }
       : undefined,
+    // Proxy API requests to FastAPI backend
+    proxy: {
+      "/api": {
+        target: "http://localhost:1430",
+        changeOrigin: true,
+      },
+    },
   },
 })

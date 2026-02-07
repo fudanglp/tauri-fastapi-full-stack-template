@@ -236,6 +236,23 @@ The FastAPI backend runs as a separate process (sidecar) that Tauri spawns:
 - **Development**: Backend runs separately via `uvicorn` (make dev starts both)
 - **Production**: Backend is bundled as PyInstaller binary, Tauri spawns it with `DATA_DIR` set to app data directory
 
+### Inter-Process Communication (IPC)
+
+This template uses a **three-process architecture** where Frontend, Tauri (Rust), and FastAPI (Python) communicate through different methods depending on the use case:
+
+- **Frontend → Tauri**: IPC commands (native operations like windows, file dialogs)
+- **Frontend → FastAPI**: HTTP REST (database queries, business logic)
+- **Tauri → FastAPI**: HTTP (health checks during startup)
+- **FastAPI → Tauri**: Unix socket (desktop features like window control)
+
+**Example**: The "Toggle Maximize" button on the dashboard demonstrates this architecture:
+1. Frontend calls `POST /api/v1/window`
+2. FastAPI forwards to Unix socket
+3. Rust Axum server processes request
+4. Tauri maximizes/restores the window
+
+📖 **See [docs/IPC.md](docs/IPC.md)** for complete documentation on communication patterns.
+
 ### Database Location
 
 - **Dev**: `.data/app.db` (project root)

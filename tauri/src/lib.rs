@@ -1,4 +1,5 @@
 mod config;
+mod socket_server;
 
 use std::sync::Mutex;
 use std::thread;
@@ -6,8 +7,7 @@ use std::time::Instant;
 use tauri::Manager;
 use tauri::AppHandle;
 use tauri::menu::{Menu, MenuItem};
-use tauri::tray::{TrayIconEvent, TrayIconBuilder};
-use tauri_plugin_notification::NotificationExt;
+use tauri::tray::TrayIconBuilder;
 
 #[cfg(not(debug_assertions))]
 use std::collections::HashMap;
@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use tauri_plugin_shell::ShellExt;
 
 use config::{Settings, SETTINGS};
+use socket_server::run_socket_server;
 
 // Global state to hold the sidecar process handle
 struct SidecarState {
@@ -198,66 +199,38 @@ fn is_dev_mode() -> bool {
     Settings::is_dev_mode()
 }
 
+/// Toggle window maximize/restore
+#[tauri::command]
+fn toggle_window_maximize(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        let is_maximized = window.is_maximized().map_err(|e| e.to_string())?;
+
+        if is_maximized {
+            window.unmaximize().map_err(|e| e.to_string())?;
+        } else {
+            window.maximize().map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    } else {
+        Err("Main window not found".to_string())
+    }
+}
+
 /// Create the system tray with menu items
 fn create_system_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     // Create menu items
     let show_item = MenuItem::with_id(app, "show", "Show", true, None::<&str>)?;
     let hide_item = MenuItem::with_id(app, "hide", "Hide", true, None::<&str>)?;
-    let notify_item = MenuItem::with_id(app, "notify", "Test Notification", true, None::<&str>)?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
     // Create the menu
-    let menu = Menu::with_items(app, &[&show_item, &hide_item, &notify_item, &quit_item])?;
+    let menu = Menu::with_items(app, &[&show_item, &hide_item, &quit_item])?;
 
     // Create the tray icon using the 32x32 icon
     let _tray = TrayIconBuilder::new()
         .menu(&menu)
-        .show_menu_on_left_click(true)
         .tooltip("Tauri FastAPI Template")
         .icon(app.default_window_icon().unwrap().clone())
-        .on_tray_icon_event(|_tray, event| {
-            match event {
-                TrayIconEvent::Click {
-                    id: _,
-                    position: _,
-                    rect: _,
-                    button: _,
-                    button_state: _,
-                } => {
-                    log::info!("Tray icon clicked");
-                }
-                TrayIconEvent::DoubleClick {
-                    id: _,
-                    position: _,
-                    rect: _,
-                    button: _,
-                } => {
-                    log::info!("Tray icon double clicked");
-                }
-                TrayIconEvent::Enter {
-                    id: _,
-                    position: _,
-                    rect: _,
-                } => {
-                    log::info!("Mouse entered tray icon");
-                }
-                TrayIconEvent::Move {
-                    id: _,
-                    position: _,
-                    rect: _,
-                } => {
-                    log::info!("Mouse moved on tray icon");
-                }
-                TrayIconEvent::Leave {
-                    id: _,
-                    position: _,
-                    rect: _,
-                } => {
-                    log::info!("Mouse left tray icon");
-                }
-                _ => {}
-            }
-        })
         .build(app)?;
 
     Ok(())
@@ -268,7 +241,6 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_notification::init())
         .manage(SidecarState {
             child: Mutex::new(None),
         })
@@ -283,6 +255,20 @@ pub fn run() {
             if let Err(e) = create_system_tray(app.handle()) {
                 log::error!("Failed to create system tray: {}", e);
             }
+
+            // Start Unix socket server for FastAPI communication
+            let app_handle = app.handle().clone();
+
+            thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new()
+                    .expect("Failed to create tokio runtime");
+
+                rt.block_on(async {
+                    if let Err(e) = run_socket_server(app_handle).await {
+                        log::error!("Socket server error: {}", e);
+                    }
+                });
+            });
 
             Ok(())
         })
@@ -299,15 +285,7 @@ pub fn run() {
                         let _ = window.hide();
                     }
                 }
-                "notify" => {
-                    let _ = app.notification()
-                        .builder()
-                        .title("Hello from Tray!")
-                        .body("This is a test notification from the system tray.")
-                        .show();
-                }
                 "quit" => {
-                    log::info!("Quit menu item clicked");
                     stop_backend(app.app_handle());
                     app.exit(0);
                 }
@@ -321,7 +299,7 @@ pub fn run() {
                 stop_backend(app.app_handle());
             }
         })
-        .invoke_handler(tauri::generate_handler![get_data_dir, is_dev_mode])
+        .invoke_handler(tauri::generate_handler![get_data_dir, is_dev_mode, toggle_window_maximize])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
