@@ -5,7 +5,7 @@
 This project combines two excellent templates:
 
 - **[Tauri](https://tauri.app)** - Cross-platform desktop apps with Rust
-- **[FastAPI Full Stack Template](https://github.com/fastapi/full-stack-fastapi-template)** - Production-ready backend/frontend stack
+- **[FastAPI Full Stack Template](https://github.com/fastapi/full-stack-fastapi-template)** - Production-ready backend/frontend stack (forked from commit [`1c6d656`](https://github.com/fastapi/full-stack-fastapi-template/commit/1c6d6564))
 
 This is a **starter template** designed to be customized for your own application. It provides a complete full-stack desktop app foundation with optional authentication.
 
