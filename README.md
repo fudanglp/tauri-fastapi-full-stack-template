@@ -11,7 +11,9 @@ This is a **starter template** designed to be customized for your own applicatio
 
 ![App Screenshot](docs/assets/screenshot-dashboard.png)
 
-## Features
+## Architecture & Tech Stack
+
+### Technology Stack
 
 - **Frontend**: React + TypeScript with Vite, TanStack Router, TanStack Query, Tailwind CSS, shadcn/ui
 - **Backend**: FastAPI with SQLite, SQLModel, Alembic migrations, Pydantic settings
@@ -19,106 +21,37 @@ This is a **starter template** designed to be customized for your own applicatio
 - **Auth**: Optional - disabled by default for local desktop use
 - **Build**: PyInstaller bundles Python backend into single binary, Tauri creates native installers
 
-## Quick Start
+### Architecture Overview
 
-```bash
-# Install dependencies
-make setup
+This is a **three-process desktop application**:
 
-# Terminal 1: Start the FastAPI backend
-make fastapi
+```mermaid
+graph TB
+    subgraph "Tauri Desktop App"
+        Frontend[React Frontend<br/>WebView]
+        Rust[Rust Backend<br/>Tauri]
+        Frontend <-->|IPC Commands| Rust
+    end
 
-# Terminal 2: Start the Tauri desktop app
-make dev
+    Frontend -->|HTTP REST<br/>localhost:1420→1430| FastAPI
+    FastAPI -->|Unix Socket| Rust
+
+    subgraph "FastAPI Sidecar"
+        FastAPI[FastAPI<br/>Python]
+        DB[(SQLite DB)]
+        FastAPI --> DB
+    end
 ```
 
-**Why two terminals?** In development mode, Tauri doesn't spawn the sidecar binary (it uses the dev server instead). The backend runs separately so you get hot-reload and easier debugging. The app opens at http://localhost:1420 with the backend API at http://localhost:1430.
+**How the processes communicate**:
+- **Frontend → Tauri**: IPC commands (native operations like windows, file dialogs)
+- **Frontend → FastAPI**: HTTP REST (database queries, business logic)
+- **Tauri → FastAPI**: HTTP (health checks during startup)
+- **FastAPI → Tauri**: Unix socket (desktop features like window control)
 
-## Development
+📖 **See [docs/IPC.md](docs/IPC.md)** for complete documentation on communication patterns.
 
-```bash
-# Run full app (Tauri + frontend dev server + separate backend)
-make dev
-
-# Run only frontend dev server (if backend is already running)
-make dev-frontend
-
-# Run only backend (for debugging)
-make fastapi
-
-# Initialize/reset database
-make init-db
-
-# Generate API clients from backend OpenAPI schema
-make generate-client
-```
-
-## Building for Production
-
-```bash
-# Build everything (frontend + backend binary + Tauri app)
-make build
-
-# Or build step by step:
-make build-backend    # PyInstaller: tauri/binaries/fastapi-server-{arch}-{os}
-cargo tauri build     # Creates .deb, .rpm, .AppImage (Linux)
-```
-
-Output: `tauri/target/release/bundle/`
-
-## Customizing This Template ("Second Dev")
-
-This is a **template** - you'll need to customize it for your application:
-
-### 1. Rename the App
-
-Edit `tauri/tauri.conf.json`:
-
-```json
-{
-  "productName": "your-app-name",
-  "identifier": "com.yourcompany.your-app-name",
-  "title": "Your App Name"
-}
-```
-
-### 2. Update Backend Config
-
-Edit `fastapi/app/core/config.py`:
-
-```python
-PROJECT_NAME: str = "Your App Name"
-AUTH_REQUIRED: bool = False  # Set to True to enable authentication
-```
-
-### 3. Update Frontend
-
-- Edit `frontend/src/routes/_layout.tsx` - change page title, branding
-- Replace shadcn/ui components in `frontend/src/components/`
-- Add your routes in `frontend/src/routes/`
-
-### 4. Update Database Models
-
-- Edit `fastapi/app/models.py` - add your SQLModel models
-- Create migration: `cd fastapi && uv run alembic revision --autogenerate -m "description"`
-- Run migrations: `uv run alembic upgrade head`
-
-### 5. Update API Routes
-
-- Add routes in `fastapi/app/api/deps/` (per-feature modules)
-- Import in `fastapi/app/api/main.py`
-
-### 6. Regenerate API Clients
-
-After changing backend models/routes:
-
-```bash
-make generate-client
-```
-
-This regenerates TypeScript and Rust clients from the OpenAPI schema.
-
-## Project Structure
+### Project Structure
 
 ```
 ├── frontend/          # React + TypeScript + Vite
@@ -143,48 +76,17 @@ This regenerates TypeScript and Rust clients from the OpenAPI schema.
 └── scripts/          # Utility scripts (generate-client, etc.)
 ```
 
-## Architecture
+### Data Management
 
-This is a backend/frontend desktop application. The Python FastAPI backend handles data persistence and business logic, while the React frontend provides the UI. Tauri wraps everything as a desktop app.
+**Database**: SQLite for local data storage (no external server needed)
 
-### Database Management (SQLite + Alembic)
-
-**Database**: SQLite for simplicity (no external server needed)
-
-**Migrations**: Alembic for schema version control
-
-```bash
-# Create a migration after changing models
-cd fastapi
-uv run alembic revision --autogenerate -m "description"
-
-# Apply migrations
-uv run alembic upgrade head
-
-# In production: migrations run automatically on first startup
-# (Schema created from SQLModel models, no alembic files needed)
-```
-
-**Development vs Production**:
-- **Dev**: Alembic migrations run on startup (`make fastapi` or `make dev`)
-- **Production**: Tables created from SQLModel models (alembic files bundled but not used)
-
-**Reset database**:
-```bash
-make init-db  # Re-initializes database with default user
-```
-
-**Database Location**:
+**Location**:
 - **Dev**: `.data/app.db` (project root)
 - **Production (Linux)**: `~/.local/share/com.glp.tauri-fastapi-full-stack-template/app.db`
 - **Production (macOS)**: `~/Library/Application Support/com.glp.tauri-fastapi-full-stack-template/app.db`
 - **Production (Windows)**: `%APPDATA%\com.glp.tauri-fastapi-full-stack-template\app.db`
 
-📖 **See [docs/data-management.md](docs/data-management.md)** for complete documentation on data storage, migrations, and models.
-
-### Data Models (SQLModel + OpenAPI Codegen)
-
-**Model Flow**: `FastAPI/SQLModel → OpenAPI JSON → TypeScript + Rust Types`
+**Models**: SQLModel with automatic TypeScript/Rust type generation via OpenAPI
 
 ```mermaid
 flowchart LR
@@ -193,108 +95,345 @@ flowchart LR
     B --> D[Rust Types<br/>auto-gen]
 ```
 
-Models are defined **once** in `fastapi/app/models.py` using [SQLModel](https://sqlmodel.tutorial.fastapi.to/):
+**Migrations**: Alembic for schema version control
 
-```python
-# fastapi/app/models.py
-from sqlmodel import Field, SQLModel
-from typing import Optional
+📖 **See [docs/data-management.md](docs/data-management.md)** for complete documentation on data storage, migrations, and models.
 
-class User(SQLModel, table=True):
-    id: str = Field(default_factory=lambda: uuid4().hex, primary_key=True)
-    email: str = Field(unique=True, index=True)
-    full_name: Optional[str] = None
-    is_active: bool = True
-```
+## Development
 
-**Types are auto-generated for both frontend and backend** - no manual type definitions needed:
+### Quick Start
 
-```typescript
-// frontend/src/client/types.ts - AUTO-GENERATED
-export interface User {
-  id: string;
-  email: string;
-  full_name?: string;
-  is_active: boolean;
-}
-```
+Get the app running in 3 steps:
 
-```rust
-// tauri/src/client/types.rs - AUTO-GENERATED
-#[derive(Serialize, Deserialize)]
-pub struct User {
-    pub id: String,
-    pub email: String,
-    pub full_name: Option<String>,
-    pub is_active: bool,
-}
-```
+**1. Install system tools** (first time only):
 
-**Adding a model**:
+- [Rust](https://www.rust-lang.org/tools/install) (via rustup)
+- [bun](https://bun.sh/docs/installation/) (includes Node.js)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) (includes Python)
 
-1. Define model in `fastapi/app/models.py`
-2. Create migration: `uv run alembic revision --autogenerate -m "add model"`
-3. Apply migration: `uv run alembic upgrade head`
-4. Regenerate clients: `make generate-client`
-
-📖 **See [docs/data-management.md](docs/data-management.md)** for complete documentation on model types, hierarchies, and code generation.
-
-### Sidecar Pattern
-
-The FastAPI backend runs as a separate process (sidecar) that Tauri spawns:
-
-- **Development**: Backend runs separately via `uvicorn` (make dev starts both)
-- **Production**: Backend is bundled as PyInstaller binary, Tauri spawns it with `DATA_DIR` set to app data directory
-
-### Inter-Process Communication (IPC)
-
-This template uses a **three-process architecture** where Frontend, Tauri (Rust), and FastAPI (Python) communicate through different methods depending on the use case:
-
-- **Frontend → Tauri**: IPC commands (native operations like windows, file dialogs)
-- **Frontend → FastAPI**: HTTP REST (database queries, business logic)
-- **Tauri → FastAPI**: HTTP (health checks during startup)
-- **FastAPI → Tauri**: Unix socket (desktop features like window control)
-
-**Example**: The "Toggle Maximize" button on the dashboard demonstrates this architecture:
-1. Frontend calls `POST /api/v1/window`
-2. FastAPI forwards to Unix socket
-3. Rust Axum server processes request
-4. Tauri maximizes/restores the window
-
-📖 **See [docs/IPC.md](docs/IPC.md)** for complete documentation on communication patterns.
-
-### Auth (Optional)
-
-Authentication is **disabled by default**. To enable:
-
-```python
-# fastapi/app/core/config.py
-AUTH_REQUIRED: bool = True
-```
-
-Then the app will require login and use JWT tokens.
-
-## Make Targets
+**2. Install project dependencies** (first time only):
 
 ```bash
-make setup          # Install all dependencies
-make dev            # Run development mode
-make dev-frontend   # Frontend only
-make fastapi        # Backend only
-make init-db        # Initialize database
-make generate-client # Generate API clients
-make build-backend  # Build PyInstaller binary
-make build          # Build production bundles
-make clean          # Clean all build artifacts
-make help           # Show all targets
+make setup
 ```
 
-## Requirements
+This installs:
+- Tauri CLI (via cargo)
+- Frontend dependencies (via bun)
+- Backend Python packages (via uv)
 
-- **Rust** (via rustup) - Tauri
-- **Node.js** + **bun** - Frontend
-- **Python 3.11+** + **uv** - Backend
-- **System**: Linux, macOS, or Windows
+**3. Run the app**:
+
+```bash
+# Terminal 1: Start the FastAPI backend
+make fastapi
+
+# Terminal 2: Start the Tauri desktop app
+make dev
+```
+
+The app opens at http://localhost:1420 with the backend API at http://localhost:1430.
+
+**Why two terminals?** In development mode, the backend runs separately so you get hot-reload and easier debugging. Tauri doesn't spawn the sidecar binary in dev mode.
+
+### Requirements
+
+**System tools** (install separately first):
+
+1. **[Rust](https://www.rust-lang.org/tools/install)** (via rustup)
+   - Required by Tauri
+   - After installing Rust, `make setup` will install [Tauri CLI](https://tauri.app/v2/guides/getting-started/prerequisites)
+
+2. **[bun](https://bun.sh/docs/installation/)**
+   - Includes [Node.js](https://nodejs.org/) runtime
+   - Frontend package manager
+
+3. **[uv](https://docs.astral.sh/uv/getting-started/installation/)**
+   - Includes [Python 3.11+](https://www.python.org/downloads/) runtime
+   - Backend package manager
+
+4. **System**: Linux, macOS, or Windows
+
+### Frontend Development
+
+**Stack**: React + TypeScript, Vite, TanStack Router (file-based), TanStack Query, Tailwind CSS, shadcn/ui
+
+**File structure**:
+```
+frontend/src/
+├── routes/          # File-based routing (TanStack Router)
+├── components/      # Reusable UI components
+├── client/          # Auto-generated API client
+└── hooks/           # Custom React hooks
+```
+
+**Typical tasks**:
+
+1. **Add a new page/route**:
+   ```bash
+   # Create route file
+   touch frontend/src/routes/about.tsx
+   ```
+   ```typescript
+   // frontend/src/routes/about.tsx
+   import { createFileRoute } from '@tanstack/react-router'
+
+   export const Route = createFileRoute('/about')({
+     component: About,
+   })
+
+   function About() {
+     return <div>About Page</div>
+   }
+   ```
+
+2. **Add a widget/component**:
+   ```bash
+   # Create component
+   touch frontend/src/components/StatsCard.tsx
+   ```
+   ```typescript
+   // frontend/src/components/StatsCard.tsx
+   export function StatsCard({ title, value }: { title: string; value: number }) {
+     return (
+       <div className="p-4 border rounded-lg">
+         <h3 className="text-lg font-semibold">{title}</h3>
+         <p className="text-2xl">{value}</p>
+       </div>
+     )
+   }
+   ```
+
+3. **Call API endpoints**:
+   ```typescript
+   import { client } from '@/client/client'
+   import { useQuery, useMutation } from '@tanstack/react-query'
+
+   // GET request
+   const { data: users } = useQuery({
+     queryKey: ['users'],
+     queryFn: () => client.GET('/api/v1/users/'),
+   })
+
+   // POST request
+   const createUser = useMutation({
+     mutationFn: (data: UserCreate) =>
+       client.POST('/api/v1/users/', { body: data }),
+   })
+   ```
+
+4. **Styling with Tailwind**:
+   ```typescript
+   // Utility classes for styling
+   <div className="flex items-center gap-4 p-4 bg-white rounded-lg shadow">
+     {/* Content */}
+   </div>
+   ```
+
+**Hot reload**: Vite automatically reloads the frontend when you save changes.
+
+### FastAPI Backend Development
+
+**Stack**: FastAPI, SQLModel, Alembic (migrations), Pydantic (validation)
+
+**File structure**:
+```
+fastapi/app/
+├── api/             # API routes
+├── core/            # Config, database, logging
+├── models.py        # SQLModel database models
+└── crud.py          # Database operations
+```
+
+**Data models** (detailed docs: [docs/data-management.md](docs/data-management.md)):
+
+1. **Add a new model**:
+   ```python
+   # fastapi/app/models.py
+   from sqlmodel import SQLModel, Field
+   from datetime import datetime
+   from uuid import UUID, uuid4
+
+   class ProductBase(SQLModel):
+       name: str = Field(max_length=255)
+       price: float = Field(gt=0)
+
+   class Product(ProductBase, table=True):
+       id: UUID = Field(default_factory=uuid4, primary_key=True)
+       created_at: datetime = Field(default_factory=datetime.utcnow)
+   ```
+
+2. **Create database migration**:
+   ```bash
+   cd fastapi
+   uv run alembic revision --autogenerate -m "add products"
+   uv run alembic upgrade head
+   ```
+
+3. **Regenerate API clients**:
+   ```bash
+   make generate-client
+   ```
+
+4. **Add API endpoint**:
+   ```python
+   # fastapi/app/api/routes/products.py
+   from fastapi import APIRouter, Depends
+   from app.models import Product, ProductCreate
+   from app.crud import create_product
+
+   router = APIRouter()
+
+   @router.post("/", response_model=Product)
+   def create_new_product(
+       product: ProductCreate,
+       session: Session = Depends(get_session),
+   ):
+       return create_product(session, product)
+   ```
+
+5. **Update model (add/remove fields)**:
+   ```python
+   # Edit model in models.py
+   class ProductBase(SQLModel):
+       name: str = Field(max_length=255)
+       price: float = Field(gt=0)
+       description: str | None = Field(default=None)  # New field
+
+   # Create migration
+   cd fastapi
+   uv run alembic revision --autogenerate -m "add product description"
+   uv run alembic upgrade head
+
+   # Regenerate API clients
+   make generate-client
+   ```
+
+**Test API**:
+- Swagger UI: http://localhost:1430/docs (interactive API docs)
+- ReDoc: http://localhost:1430/redoc (alternative docs)
+
+### Tauri (Rust) Development
+
+**Stack**: Rust, Tauri 2
+
+**File structure**:
+```
+tauri/src/
+├── lib.rs           # Main app, Tauri commands
+├── config.rs        # Rust config from environment variables
+└── socket_server.rs # Unix socket server for FastAPI → Rust communication
+```
+
+**Typical tasks**:
+
+1. **Add a Rust dependency**:
+   ```toml
+   # tauri/Cargo.toml
+   [dependencies]
+   serde_json = "1.0"
+   ```
+
+2. **Add a Tauri command (IPC)**:
+   ```rust
+   // tauri/src/lib.rs
+   #[tauri::command]
+   fn greet(name: &str) -> String {
+       format!("Hello, {}!", name)
+   }
+
+   // Register in main()
+   fn main() {
+       tauri::Builder::default()
+           .invoke_handler(tauri::generate_handler![greet])
+           .run(tauri::generate_context!())
+           .expect("error while running tauri application");
+   }
+   ```
+
+3. **Call Tauri command from frontend**:
+   ```typescript
+   import { invoke } from '@tauri-apps/api/core'
+
+   const greeting = await invoke('greet', { name: 'World' })
+   ```
+
+4. **Test Tauri commands**:
+   ```bash
+   # Run Tauri dev (requires backend running separately)
+   make dev
+   ```
+
+5. **Build Rust backend**:
+   ```bash
+   # Build only the Rust part
+   cd tauri
+   cargo build
+   ```
+
+**Communication with FastAPI**: See [docs/IPC.md](docs/IPC.md) for Unix socket communication patterns.
+
+### Make Targets
+
+```bash
+make setup            # Install all dependencies
+make dev              # Run development mode (requires backend running)
+make dev-frontend     # Frontend only (if backend is already running)
+make fastapi          # Backend only (for debugging)
+make init-db          # Initialize/reset database
+make generate-client  # Generate API clients from OpenAPI schema
+make package-backend  # Package FastAPI backend binary
+make package          # Package production bundles
+make clean            # Clean all build artifacts
+make help             # Show all targets
+```
+
+### Customization
+
+This is a **template** - customize these project-specific settings for your application:
+
+**1. Rename the app** - Edit `tauri/tauri.conf.json`:
+```json
+{
+  "productName": "your-app-name",
+  "identifier": "com.yourcompany.your-app-name",
+  "title": "Your App Name"
+}
+```
+
+**2. Update backend config** - Edit `fastapi/app/core/config.py`:
+```python
+PROJECT_NAME: str = "Your App Name"
+AUTH_REQUIRED: bool = False  # Set to True to enable authentication
+```
+
+**3. Update frontend branding** - Edit `frontend/src/routes/_layout.tsx`:
+```typescript
+// Change page title, branding, etc.
+```
+
+For adding features (routes, models, API endpoints), see the [Development](#development) sections above.
+
+### Building for Production
+
+Package the distributable application:
+
+```bash
+# Package everything (frontend + backend binary + Tauri app)
+make package
+
+# Or package step by step:
+make package-backend  # PyInstaller: tauri/binaries/fastapi-server-{arch}-{os}
+cargo tauri build     # Creates .deb, .rpm, .AppImage (Linux)
+```
+
+Output: `tauri/target/release/bundle/`
+
+**What happens during build**:
+1. Frontend builds to static files
+2. Python backend bundles into PyInstaller binary
+3. Tauri creates platform-specific installers
+4. In production, Tauri automatically spawns the FastAPI sidecar with proper data directory
 
 ## License
 

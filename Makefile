@@ -2,7 +2,7 @@
 # Makefile for Tauri FastAPI Full Stack Template
 # =============================================================================
 
-.PHONY: setup dev build dev-frontend fastapi init-db clean generate-client build-backend
+.PHONY: setup dev package dev-frontend fastapi init-db clean generate-client package-backend
 
 # Project root directory
 PROJECT_ROOT := $(shell pwd)
@@ -70,22 +70,22 @@ init-db:
 	@echo "==> ✅ Database initialized!"
 
 # =============================================================================
-# Build
+# Package
 # =============================================================================
 
-##@ Build 📦
+##@ Package 📦
 
-# Build the FastAPI sidecar binary (PyInstaller)
-build-backend:
-	@echo "==> 🔨 Building FastAPI sidecar binary..."
+# Package the FastAPI sidecar binary (PyInstaller)
+package-backend:
+	@echo "==> 📦 Packaging FastAPI sidecar binary..."
 	cd fastapi && uv run --with build build.py
 
-# Build the desktop application for production
+# Package the desktop application for production
 # This will create platform-specific installers in tauri/target/release/bundle/
-build: build-backend
-	@echo "==> 📦 Building Tauri desktop bundle..."
+package: package-backend
+	@echo "==> 📦 Packaging Tauri desktop bundle..."
 	cargo tauri build
-	@echo "==> ✅ Build complete! Check tauri/target/release/bundle/ for output."
+	@echo "==> ✅ Package complete! Check tauri/target/release/bundle/ for output."
 
 # =============================================================================
 # Maintenance
@@ -137,8 +137,9 @@ help:
 	@echo "  Database 🗄️"
 	@echo "    init-db            Initialize database"
 	@echo ""
-	@echo "  Build 📦"
-	@echo "    build              Build production bundle"
+	@echo "  Package 📦"
+	@echo "    package            Package production bundle"
+	@echo "    package-backend    Package FastAPI backend binary"
 	@echo ""
 	@echo "  Maintenance 🧹"
 	@echo "    clean              Clean build artifacts"
