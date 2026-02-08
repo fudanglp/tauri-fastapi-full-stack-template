@@ -7,16 +7,30 @@ DMABUF (Direct Memory Access Buffer) is a Linux kernel mechanism for sharing buf
 ## Why DMABUF?
 
 ### Traditional Approach (CPU Copy)
-```
-Rust GPU → glReadPixels → CPU RAM → IPC → Browser → Upload to GPU
+```mermaid
+flowchart LR
+    RGPU["Rust GPU"] --> glRead["glReadPixels"]
+    glRead --> CPU["CPU RAM"]
+    CPU --> IPC["IPC"]
+    IPC --> Browser["Browser"]
+    Browser --> Upload["Upload to GPU"]
+
+    style CPU fill:#f99,stroke:#333
+    style IPC fill:#fc9,stroke:#333
 ```
 - **Slow**: CPU copy bottleneck
 - **High latency**: ~10-30ms for 1080p
 - **High power**: Memory bandwidth intensive
 
 ### DMABUF Approach (Zero-Copy)
-```
-Rust GPU → DMABUF Handle → Browser → Direct GPU Access
+```mermaid
+flowchart LR
+    RGPU["Rust GPU"] --> DMABUF["DMABUF Handle"]
+    DMABUF --> Browser["Browser"]
+    Browser --> Direct["Direct GPU Access"]
+
+    style DMABUF fill:#9f9,stroke:#333
+    style Direct fill:#9f9,stroke:#333
 ```
 - **Fast**: No CPU copies
 - **Low latency**: ~1-3ms
@@ -36,37 +50,50 @@ Rust GPU → DMABUF Handle → Browser → Direct GPU Access
 - WebKitGTK 2.40+ with DMA-BUF import support
 - EGL 1.5+ with `EGL_EXT_image_dma_buf_import` extension
 - Check support:
-  ```bash
-  # Check EGL extensions
- eglinfo | grep dma_buf
+```bash
+# Check EGL extensions
+eglinfo | grep dma_buf
 
-  # Check WebKitGTK version
-  pkg-config --modversion webkit2gtk-4.1
-  ```
+# Check WebKitGTK version
+pkg-config --modversion webkit2gtk-4.1
+```
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                         Tauri App                           │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────────┐         ┌─────────────────────────┐   │
-│  │  Rust Backend   │         │    WebKitGTK Frontend   │   │
-│  │                 │         │                         │   │
-│  │  ┌───────────┐  │         │  ┌───────────────────┐  │   │
-│  │  │  OpenGL   │  │         │  │      <canvas>     │  │   │
-│  │  │  Render   │  │         │  │   WebGL Context   │  │   │
-│  │  └─────┬─────┘  │         │  └─────────┬─────────┘  │   │
-│  │        │        │         │            │             │   │
-│  │  ┌─────▼─────┐  │ DMABUF  │  ┌─────────▼─────────┐  │   │
-│  │  │ EGL/G BM │──┼─────────┼─▶│  WebGL Texture    │  │   │
-│  │  │  Export  │  │ FD      │  │   Import          │  │   │
-│  │  └──────────┘  │         │  └───────────────────┘  │   │
-│  └─────────────────┘         └─────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-         │                                        │
-         ▼                                        ▼
-    GPU Memory (Shared)                    GPU Memory
+```mermaid
+flowchart TB
+    subgraph Layer1[" "]
+        direction LR
+
+        subgraph Rust["Rust Backend"]
+            OpenGL["OpenGL Render"]
+            EGL["EGL/GBM Export"]
+            OpenGL --> EGL
+        end
+
+        subgraph WebKitGTK["WebKitGTK Frontend"]
+            Canvas["<canvas> WebGL Context"]
+            Texture["WebGL Texture Import"]
+            Canvas --> Texture
+        end
+    end
+
+    subgraph Layer2[" "]
+        subgraph GPU["Shared GPU Memory"]
+            GPU1["(via EGL/GBM)"]
+            GPU2["(via WebGL)"]
+        end
+    end
+
+    EGL -->|DMABUF FD| Texture
+    EGL --> GPU1
+    Texture --> GPU2
+
+    style Rust fill:#f9f,stroke:#333,stroke-width:2px
+    style WebKitGTK fill:#bbf,stroke:#333,stroke-width:2px
+    style GPU fill:#9f9,stroke:#333,stroke-width:2px
+    style Layer1 fill:#fff,stroke:#fff,stroke-width:0px
+    style Layer2 fill:#fff,stroke:#fff,stroke-width:0px
 ```
 
 ## Implementation Options
