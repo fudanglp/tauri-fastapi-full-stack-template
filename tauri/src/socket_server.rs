@@ -9,7 +9,6 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager};
-use tokio::net::UnixListener;
 use tokio::signal;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -102,16 +101,40 @@ fn create_router(state: AppState) -> Router {
         .with_state(state)
 }
 
-pub fn get_socket_path() -> PathBuf {
+fn get_runtime_dir() -> PathBuf {
     let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
         .or_else(|_| std::env::var("TMP"))
         .or_else(|_| std::env::var("TEMP"))
         .unwrap_or_else(|_| "/tmp".to_string());
 
-    PathBuf::from(runtime_dir).join("tauri-fastapi.sock")
+    PathBuf::from(runtime_dir)
+}
+
+/// Unix socket path used on Linux/macOS.
+#[cfg(unix)]
+pub fn get_socket_path() -> PathBuf {
+    get_runtime_dir().join("tauri-fastapi.sock")
+}
+
+/// On Windows (no AF_UNIX support in tokio), the server listens on a loopback
+/// TCP port and writes that port number to this file for FastAPI to read.
+#[cfg(not(unix))]
+pub fn get_port_file_path() -> PathBuf {
+    get_runtime_dir().join("tauri-fastapi.port")
 }
 
 pub async fn run_socket_server(app_handle: AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    let state = AppState {
+        app_handle: Arc::new(Mutex::new(Some(app_handle))),
+    };
+
+    serve(create_router(state)).await
+}
+
+#[cfg(unix)]
+async fn serve(app: Router) -> Result<(), Box<dyn std::error::Error>> {
+    use tokio::net::UnixListener;
+
     let socket_path = get_socket_path();
 
     if socket_path.exists() {
@@ -120,17 +143,32 @@ pub async fn run_socket_server(app_handle: AppHandle) -> Result<(), Box<dyn std:
 
     let listener = UnixListener::bind(&socket_path)?;
 
-    let state = AppState {
-        app_handle: Arc::new(Mutex::new(Some(app_handle))),
-    };
-
-    let app = create_router(state);
-
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 
     let _ = fs::remove_file(&socket_path);
+
+    Ok(())
+}
+
+#[cfg(not(unix))]
+async fn serve(app: Router) -> Result<(), Box<dyn std::error::Error>> {
+    use tokio::net::TcpListener;
+
+    // Port 0 lets the OS pick a free port, avoiding collisions.
+    let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
+    let port = listener.local_addr()?.port();
+
+    let port_file = get_port_file_path();
+    fs::write(&port_file, port.to_string())?;
+    log::info!("IPC server listening on 127.0.0.1:{} ({})", port, port_file.display());
+
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
+
+    let _ = fs::remove_file(&port_file);
 
     Ok(())
 }

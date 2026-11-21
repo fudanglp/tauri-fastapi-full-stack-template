@@ -11,7 +11,7 @@ This document describes how the frontend, Tauri (Rust backend), and FastAPI (Pyt
 - **[1. Frontend → Tauri (Rust)](#1-frontend--tauri-rust)** - Tauri Commands (IPC)
 - **[2. Frontend → FastAPI](#2-frontend--fastapi)** - HTTP REST
 - **[3. Tauri (Rust) → FastAPI](#3-tauri-rust--fastapi)** - HTTP (ureq)
-- **[4. FastAPI → Tauri (Rust)](#4-fastapi--tauri-rust)** - Unix Socket
+- **[4. FastAPI → Tauri (Rust)](#4-fastapi--tauri-rust)** - Unix socket (loopback TCP on Windows)
 - **[Summary Table](#summary-table)**
 - **[Communication Flow Examples](#communication-flow-examples)**
 - **[Recommendations](#recommendations)**
@@ -43,7 +43,7 @@ The three processes communicate in **four directions**:
 1. **Frontend → Tauri** (IPC Commands) - Native operations like file dialogs, windows
 2. **Frontend → FastAPI** (HTTP REST) - Database queries, business logic
 3. **Tauri → FastAPI** (HTTP) - Health checks during startup
-4. **FastAPI → Tauri** (Unix Socket) - Desktop features like window control
+4. **FastAPI → Tauri** (Unix socket, loopback TCP on Windows) - Desktop features like window control
 
 Each direction uses the appropriate method for its use case, balancing performance, security, and developer experience.
 
@@ -60,7 +60,7 @@ graph TB
     end
 
     Frontend -->|HTTP REST<br/>localhost:1420→1430| FastAPI
-    FastAPI -->|Unix Socket<br/>/tmp/tauri-fastapi.sock| Rust
+    FastAPI -->|Unix socket: tauri-fastapi.sock<br/>Windows: 127.0.0.1, port in tauri-fastapi.port| Rust
 
     subgraph "FastAPI Sidecar"
         FastAPI[FastAPI<br/>Python]
@@ -229,67 +229,109 @@ async def health_check():
 
 ## 4. FastAPI → Tauri (Rust)
 
-**Implementation**: Unix Socket (Axum Server)
+**Implementation**: Axum server over a Unix socket (Linux, macOS) or a loopback TCP port (Windows)
 
 **Documentation**: https://docs.rs/axum/
 
-FastAPI communicates with Tauri through the Unix socket server running in Rust. This is used for desktop-specific features like window state control.
+FastAPI communicates with Tauri through a small Axum HTTP server running in Rust. This is used for desktop-specific features like window state control.
+
+The transport depends on the platform, because `tokio::net::UnixListener` and Python's `socket.AF_UNIX` exist only on Unix:
+
+- **Linux, macOS**: Axum listens on a Unix socket file, `tauri-fastapi.sock`.
+- **Windows**: Axum binds `127.0.0.1` on a port the OS assigns, then writes that port number to `tauri-fastapi.port`. FastAPI reads the file and connects over TCP.
+
+The HTTP routes (`GET /health`, `POST /window`) are identical on both transports.
 
 ### Rust Side (Axum Server)
 
 **File**: `tauri/src/socket_server.rs`
 
 ```rust
-use axum::{routing::{get, post}, Json, Router};
-use tokio::net::UnixListener;
+pub async fn run_socket_server(app_handle: AppHandle) -> Result<(), Box<dyn std::error::Error>> {
+    let state = AppState {
+        app_handle: Arc::new(Mutex::new(Some(app_handle))),
+    };
 
-async fn toggle_window_state(Json(req): Json<WindowStateRequest>) -> Json<SocketResponse> {
-    // Handle window state logic
-    Json(SocketResponse {
-        success: true,
-        message: "Window state changed".to_string(),
-    })
+    serve(create_router(state)).await
 }
 
-pub async fn run_socket_server(app_handle: AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let socket_path = PathBuf::from("/tmp/tauri-fastapi.sock");
+#[cfg(unix)]
+async fn serve(app: Router) -> Result<(), Box<dyn std::error::Error>> {
+    use tokio::net::UnixListener;
+
+    let socket_path = get_socket_path();
+    if socket_path.exists() {
+        fs::remove_file(&socket_path)?; // clear a stale socket left by a crash
+    }
+
     let listener = UnixListener::bind(&socket_path)?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
 
-    let app = Router::new()
-        .route("/health", get(health))
-        .route("/window", post(toggle_window_state));
+    let _ = fs::remove_file(&socket_path);
+    Ok(())
+}
 
-    axum::serve(listener, app).await?;
+#[cfg(not(unix))]
+async fn serve(app: Router) -> Result<(), Box<dyn std::error::Error>> {
+    use tokio::net::TcpListener;
+
+    // Port 0 lets the OS pick a free port, avoiding collisions.
+    let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
+    let port = listener.local_addr()?.port();
+
+    let port_file = get_port_file_path();
+    fs::write(&port_file, port.to_string())?;
+
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
+
+    let _ = fs::remove_file(&port_file);
     Ok(())
 }
 ```
 
-### FastAPI Side (Unix Socket Client)
+### FastAPI Side (Socket Client)
 
 **File**: `fastapi/app/api/routes/window.py`
 
+`_connect()` hides the platform difference, so the route handlers send the same raw HTTP request on either transport:
+
 ```python
-import socket
-import json
+IS_WINDOWS = sys.platform == "win32"
+
+
+def _connect(endpoint: str, timeout: float) -> socket.socket:
+    """Open a stream connection to the Tauri IPC server."""
+    if IS_WINDOWS:
+        with open(endpoint, encoding="utf-8") as f:
+            port = int(f.read().strip())
+        return socket.create_connection(("127.0.0.1", port), timeout=timeout)
+
+    sock_obj = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock_obj.settimeout(timeout)
+    sock_obj.connect(endpoint)
+    return sock_obj
+
 
 @router.post("/window")
 async def toggle_window_state(request: WindowStateRequest):
-    socket_path = "/tmp/tauri-fastapi.sock"
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.connect(socket_path)
-
-    body = json.dumps({"action": request.action}).encode()
-    http_request = (
-        f"POST /window HTTP/1.1\r\n"
-        f"Host: localhost\r\n"
-        f"Content-Type: application/json\r\n"
-        f"Content-Length: {len(body)}\r\n"
-        f"\r\n".encode()
-    )
-
-    sock.sendall(http_request + body)
-    response = sock.recv(4096).decode()
-    sock.close()
+    sock_obj = _connect(get_socket_path(), timeout=1.0)
+    try:
+        body = json.dumps({"action": request.action}).encode()
+        http_request = (
+            f"POST /window HTTP/1.1\r\n"
+            f"Host: localhost\r\n"
+            f"Content-Type: application/json\r\n"
+            f"Content-Length: {len(body)}\r\n"
+            f"\r\n".encode()
+        )
+        sock_obj.sendall(http_request + body)
+        response = sock_obj.recv(4096).decode()
+    finally:
+        sock_obj.close()
 
     return {"status": "success", "message": "Window state changed"}
 ```
@@ -299,7 +341,7 @@ async def toggle_window_state(request: WindowStateRequest):
 **Current implementation**:
 1. User clicks "Toggle Maximize" button in frontend
 2. Frontend calls `POST /api/v1/window`
-3. FastAPI forwards request to Unix socket
+3. FastAPI forwards the request over the IPC socket
 4. Rust Axum server receives and processes request
 5. Tauri maximizes/restores the window
 
@@ -308,7 +350,7 @@ sequenceDiagram
     participant User
     participant Frontend
     participant FastAPI
-    participant Socket as Unix Socket
+    participant Socket as IPC socket
     participant Rust as Tauri Rust
 
     User->>Frontend: Click "Toggle Maximize"
@@ -322,19 +364,20 @@ sequenceDiagram
     Frontend->>User: Show success toast
 ```
 
-### Socket Path
+### Endpoint Location
 
-| Platform | Socket Path |
-|----------|-------------|
-| Linux | `$XDG_RUNTIME_DIR/tauri-fastapi.sock` or `/tmp/tauri-fastapi.sock` |
-| macOS | `/tmp/tauri-fastapi.sock` |
-| Windows | `C:\Users\<user>\AppData\Local\Temp\tauri-fastapi.sock` |
+Both sides resolve the same directory, checking in order: `XDG_RUNTIME_DIR`, `TMP`, `TEMP`, then `/tmp`. Keep `get_runtime_dir()` in Rust and `get_socket_path()` in Python in sync.
 
-**Benefits of Unix Socket**:
-- ✅ Better security (filesystem permissions)
-- ✅ Lower latency (no TCP overhead)
-- ✅ No port conflicts
-- ✅ Works on all platforms (Linux, macOS, Windows 10+)
+| Platform | Endpoint file | What it is |
+|----------|---------------|------------|
+| Linux | `$XDG_RUNTIME_DIR/tauri-fastapi.sock` (else `/tmp/tauri-fastapi.sock`) | The Unix socket |
+| macOS | `/tmp/tauri-fastapi.sock` (or under `$TMP` if set) | The Unix socket |
+| Windows | `%TMP%\tauri-fastapi.port`, e.g. `C:\Users\<user>\AppData\Local\Temp\tauri-fastapi.port` | Text file holding the TCP port on `127.0.0.1` |
+
+**Trade-offs**:
+- **Unix socket**: no TCP overhead and no port to allocate. Access follows the socket file's permissions.
+- **Loopback TCP (Windows)**: the OS-assigned port avoids conflicts, and the server is not reachable from the network. Unlike a socket file, any local process can connect to the port.
+- **Stale endpoint after a crash**: on Unix the server deletes a leftover socket at startup. On Windows a leftover `.port` file points at a closed port, so FastAPI answers `503` ("Connection refused") until the app starts again and rewrites the file.
 
 ## Summary Table
 
@@ -342,7 +385,7 @@ sequenceDiagram
 |-----------|--------|----------------|-----------|
 | Frontend → Rust | IPC (Tauri Commands) | Built-in, `invoke()` | Native operations, system access |
 | Frontend → FastAPI | HTTP REST | Auto-generated clients | Database, business logic, auth |
-| FastAPI → Rust | Unix Socket | Axum server + Python socket client | Window control, desktop integration |
+| FastAPI → Rust | Unix socket (loopback TCP on Windows) | Axum server + Python socket client | Window control, desktop integration |
 
 ## Communication Flow Examples
 
@@ -379,7 +422,7 @@ sequenceDiagram
     participant User
     participant Frontend
     participant FastAPI
-    participant Socket as Unix Socket
+    participant Socket as IPC socket
     participant Rust as Tauri (Rust)
 
     User->>Frontend: Click "Toggle Maximize"
@@ -419,6 +462,6 @@ sequenceDiagram
 
 1. **Use Tauri commands** for anything native (files, windows, system features)
 2. **Keep all database operations in FastAPI** - don't access SQLite directly from Rust
-3. **Unix socket** for FastAPI → Rust when needing desktop features (window control, tray, etc.)
+3. **The IPC socket** (Unix socket, or loopback TCP on Windows) for FastAPI → Rust when needing desktop features (window control, tray, etc.)
 4. **HTTP (ureq)** for Rust → FastAPI for health checks and simple requests
 5. **HTTP REST** for Frontend → FastAPI (standard, testable, auto-generated clients)

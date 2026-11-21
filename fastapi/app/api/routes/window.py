@@ -1,4 +1,7 @@
+import json
 import os
+import socket
+import sys
 from typing import Annotated
 
 import httpx
@@ -14,11 +17,41 @@ class WindowStateRequest(BaseModel):
     action: str  # "maximize", "restore", "toggle"
 
 
+IS_WINDOWS = sys.platform == "win32"
+
+
 def get_socket_path() -> str:
-    """Get the Unix socket path for Tauri communication."""
-    # Use XDG_RUNTIME_DIR or fallback to temp directory
-    runtime_dir = os.environ.get("XDG_RUNTIME_DIR") or os.environ.get("TMP", "/tmp")
-    return os.path.join(runtime_dir, "tauri-fastapi.sock")
+    """Get the IPC endpoint file for Tauri communication.
+
+    Linux/macOS: the Unix socket itself.
+    Windows: a file holding the loopback TCP port the Tauri server bound
+    (AF_UNIX is not available there). Must match tauri/src/socket_server.rs.
+    """
+    runtime_dir = (
+        os.environ.get("XDG_RUNTIME_DIR")
+        or os.environ.get("TMP")
+        or os.environ.get("TEMP")
+        or "/tmp"
+    )
+    name = "tauri-fastapi.port" if IS_WINDOWS else "tauri-fastapi.sock"
+    return os.path.join(runtime_dir, name)
+
+
+def _connect(endpoint: str, timeout: float) -> socket.socket:
+    """Open a stream connection to the Tauri IPC server."""
+    if IS_WINDOWS:
+        with open(endpoint, encoding="utf-8") as f:
+            port = int(f.read().strip())
+        return socket.create_connection(("127.0.0.1", port), timeout=timeout)
+
+    sock_obj = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock_obj.settimeout(timeout)
+    try:
+        sock_obj.connect(endpoint)
+    except BaseException:
+        sock_obj.close()
+        raise
+    return sock_obj
 
 
 @router.post("/window", status_code=status.HTTP_200_OK)
@@ -41,22 +74,13 @@ async def toggle_window_state(
         )
 
     try:
-        import socket as sock
-
-        # Create Unix socket
-        sock_obj = sock.socket(sock.AF_UNIX, sock.SOCK_STREAM)
-        sock_obj.settimeout(1.0)  # 1 second timeout
+        sock_obj = _connect(socket_path, timeout=1.0)
 
         try:
-            # Connect to socket
-            sock_obj.connect(socket_path)
-
             # Create HTTP POST request
             window_data = {"action": request.action}
 
             # Convert to JSON bytes
-            import json
-
             body_bytes = json.dumps(window_data).encode()
 
             # Build HTTP request
@@ -123,12 +147,7 @@ async def window_health_check() -> dict[str, str]:
         }
 
     try:
-        import socket as sock
-
-        sock_obj = sock.socket(sock.AF_UNIX, sock.SOCK_STREAM)
-        sock_obj.settimeout(0.5)
-        sock_obj.connect(socket_path)
-        sock_obj.close()
+        _connect(socket_path, timeout=0.5).close()
 
         return {
             "status": "available",
